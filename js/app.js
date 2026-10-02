@@ -928,6 +928,46 @@ window.App = (function () {
   }
 
   // ------------------------------------------------------------
+  // MARK AS PLAYED
+  // ------------------------------------------------------------
+  function openMarkPlayedModal(setlist) {
+    // Reset modal
+    const todayIso = UsageLog.today();
+    $('markPlayedDate').value = todayIso;
+    $('markPlayedNotes').value = '';
+
+    // Render the song list
+    const container = $('markPlayedSongList');
+    container.innerHTML = '';
+    let validCount = 0;
+
+    setlist.items.forEach(item => {
+      const song = Songs.getById(item.songId);
+      if (!song) return;
+      validCount++;
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '0.5rem';
+      row.style.padding = '0.25rem 0';
+      row.innerHTML = `
+        <i class="fas fa-music" style="color:#b8a695;font-size:0.75rem;"></i>
+        <span style="flex:1;">${song.title}</span>
+        <span style="color:#8a7767;font-size:0.78rem;">${song.artist || ''}</span>
+      `;
+      container.appendChild(row);
+    });
+
+    $('markPlayedCount').textContent = String(validCount);
+
+    // Store a reference for the confirm handler
+    window.__markPlayedSetlist = setlist;
+
+    // Show modal
+    $('markPlayedModal').classList.add('open');
+  }
+
+  // ------------------------------------------------------------
   // WIRE EVERYTHING
   // ------------------------------------------------------------
   function wireAll() {
@@ -1158,6 +1198,64 @@ window.App = (function () {
       PasteChords.wire();
     }
 
+    // ---- Usage tracking ----
+    if (window.UsageLog) UsageLog.load();
+
+    // Open the report modal from the sidebar
+    $('openUsageReportBtn').addEventListener('click', () => {
+      UsageReport.open();
+    });
+
+    // Mark setlist as played
+    $('markPlayedBtn').addEventListener('click', () => {
+      const sl = Setlists.getActive();
+      if (!sl || sl.items.length === 0) {
+        alert('This setlist has no songs to log.');
+        return;
+      }
+      openMarkPlayedModal(sl);
+    });
+
+    // Wire the usage report modal
+    if (window.UsageReport) UsageReport.wire();
+
+    // TODO: IS THIS BLACK BEFORE "WIRE THE USAGE REPORT MODAL?" DOES IT MAKE A DIFFERENCE? If SO, move this blok before the //wire the usage report modal comment. If not, delete this comment and move on.
+    // Confirm "Mark as Played"
+    $('markPlayedConfirmBtn').addEventListener('click', () => {
+      const sl = window.__markPlayedSetlist;
+      if (!sl) return;
+
+      const date = $('markPlayedDate').value || UsageLog.today();
+      const notes = $('markPlayedNotes').value.trim();
+
+      // Resolve song objects
+      const songs = sl.items
+        .map(item => Songs.getById(item.songId))
+        .filter(Boolean);
+
+      if (songs.length === 0) {
+        alert('No valid songs to log.');
+        return;
+      }
+
+      UsageLog.addEvent({
+        date,
+        setlistId: sl.id,
+        setlistName: sl.name,
+        notes,
+        songs
+      });
+
+      // Reset and close
+      window.__markPlayedSetlist = null;
+      $('markPlayedModal').classList.remove('open');
+
+      // Quick confirmation toast
+      console.log(`[UsageLog] Logged ${songs.length} song${songs.length === 1 ? '' : 's'} for ${date}`);
+    });
+    ////////
+
+
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' ||
@@ -1184,6 +1282,7 @@ window.App = (function () {
     // 1. Load songs and setlists from storage
     Songs.load();
     Setlists.load();
+    if (window.UsageLog) UsageLog.load();
 
     // 2. Seed the library on first run
     Songs.seedIfNeeded();

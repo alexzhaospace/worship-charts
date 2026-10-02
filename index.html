@@ -72,6 +72,9 @@
         <button id="importLibraryBtn" title="Restore from a JSON backup">
           <i class="fas fa-upload"></i> Restore
         </button>
+        <button id="openUsageReportBtn" title="See which songs you've used in services">
+          <i class="fas fa-chart-bar"></i> Usage
+        </button>
         <input type="file" id="importLibraryInput" accept=".json,application/json" style="display:none;">
       </div>
     </aside>
@@ -165,6 +168,9 @@
             </button>
             <button class="btn-secondary-dark" id="setlistDownloadBtn">
               <i class="fas fa-file-pdf"></i> Download Setlist PDF
+            </button>
+            <button class="btn-secondary-dark" id="markPlayedBtn" title="Log this setlist as played in a service">
+              <i class="fas fa-check-circle"></i> Mark as Played
             </button>
             <button class="btn-danger" id="deleteSetlistBtn">
               <i class="fas fa-trash"></i> Delete
@@ -377,7 +383,123 @@ Than Jesus' blood and righteousness"></textarea>
       </div>
     </div>
   </div>
-  
+
+  <!-- MARK AS PLAYED MODAL -->
+  <div class="modal-overlay" id="markPlayedModal">
+    <div class="modal narrow">
+      <div class="modal-header">
+        <h3><i class="fas fa-check-circle" style="color:#4a7a63;"></i> Mark Setlist as Played</h3>
+        <button class="modal-close" data-close="markPlayedModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-hint">
+          This records each song as used on the given date, for CCLI reporting.
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="markPlayedDate">Date</label>
+            <input type="date" id="markPlayedDate">
+          </div>
+        </div>
+        <div class="form-field">
+          <label for="markPlayedNotes">Service Notes (optional)</label>
+          <input type="text" id="markPlayedNotes" placeholder="e.g. Sunday AM, Reformation Sunday">
+        </div>
+        <div class="form-field" style="margin-top:0.85rem;">
+          <label>Songs to log (<span id="markPlayedCount">0</span>)</label>
+          <div id="markPlayedSongList" style="max-height:180px;overflow-y:auto;border:1px solid #e3dbd2;border-radius:10px;padding:0.6rem 0.85rem;background:#faf7f4;font-size:0.85rem;line-height:1.6;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="markPlayedModal">Cancel</button>
+        <div class="right-actions">
+          <button class="btn btn-primary" id="markPlayedConfirmBtn">
+            <i class="fas fa-check"></i> Log Usage
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- USAGE REPORT MODAL -->
+  <div class="modal-overlay" id="usageReportModal">
+    <div class="modal wide">
+      <div class="modal-header">
+        <h3><i class="fas fa-chart-bar"></i> Song Usage Report</h3>
+        <button class="modal-close" data-close="usageReportModal">&times;</button>
+      </div>
+
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-usage-tab="stats">
+          <i class="fas fa-table" style="margin-right:0.35rem;"></i> Statistics
+        </button>
+        <button class="modal-tab" data-usage-tab="events">
+          <i class="fas fa-list" style="margin-right:0.35rem;"></i> Event Log
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- ===== TAB: STATS ===== -->
+        <div class="usage-tab-panel active" id="usage-panel-stats">
+          <div class="usage-filters">
+            <div class="usage-filter-row">
+              <button class="usage-range-btn" data-range="year">This Year</button>
+              <button class="usage-range-btn" data-range="12m">Last 12 Months</button>
+              <button class="usage-range-btn" data-range="clear">All Time</button>
+            </div>
+            <div class="usage-filter-row" style="margin-top:0.5rem;">
+              <div class="usage-date-field">
+                <label>From</label>
+                <input type="date" id="usageFromDate">
+              </div>
+              <div class="usage-date-field">
+                <label>To</label>
+                <input type="date" id="usageToDate">
+              </div>
+              <div class="usage-search-field">
+                <i class="fas fa-search"></i>
+                <input type="text" id="usageSearch" placeholder="Filter by title or artist...">
+              </div>
+            </div>
+          </div>
+
+          <div class="usage-summary-row">
+            <span id="usageSummary">0 songs · 0 usages</span>
+            <button class="btn btn-secondary" id="usageExportCsvBtn" style="padding:0.4rem 0.9rem;font-size:0.8rem;">
+              <i class="fas fa-file-csv"></i> Export CSV for CCLI
+            </button>
+          </div>
+
+          <div class="usage-table-wrap">
+            <table id="usageStatsTable" class="usage-table">
+              <thead>
+                <tr>
+                  <th data-sort-col="title">Song Title</th>
+                  <th data-sort-col="artist">Artist</th>
+                  <th data-sort-col="timesUsed" style="text-align:center;width:90px;">Times Used</th>
+                  <th data-sort-col="lastUsed" style="width:110px;">Last Used</th>
+                </tr>
+              </thead>
+              <tbody id="usageStatsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== TAB: EVENTS ===== -->
+        <div class="usage-tab-panel" id="usage-panel-events">
+          <div class="form-hint">
+            Every service where you marked a setlist as played. Delete an entry if it was recorded by mistake.
+          </div>
+          <div id="usageEventsList"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="usageReportModal">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================================================
        SCRIPTS — load in dependency order
        ============================================================ -->
@@ -386,12 +508,15 @@ Than Jesus' blood and righteousness"></textarea>
   <script src="js/parser-text.js"></script>
   <script src="js/parser-formats.js"></script>
   <script src="js/parser-pdf.js"></script>
+  <script src="js/parser-web.js"></script>
   <script src="js/songs.js"></script>
   <script src="js/render.js"></script>
   <script src="js/pdf-export.js"></script>
   <script src="js/setlists.js"></script>
+  <script src="js/usage-log.js"></script>
   <script src="js/context-menu.js"></script>
   <script src="js/paste-chords.js"></script>
+  <script src="js/usage-report.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

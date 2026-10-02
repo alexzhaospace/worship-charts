@@ -1135,6 +1135,217 @@ body {
 }
 
 /* ============================================================
+   USAGE REPORT
+   ============================================================ */
+.usage-tab-panel { display: none; }
+.usage-tab-panel.active { display: block; }
+
+.usage-filters {
+  background: #faf7f4;
+  border: 1px solid #e3dbd2;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.usage-filter-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.usage-range-btn {
+  background: #ffffff;
+  border: 1px solid #e3dbd2;
+  border-radius: 20px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6e5e4f;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.usage-range-btn:hover {
+  background: #eef4f7;
+  color: #2c3e4e;
+}
+
+.usage-date-field {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #ffffff;
+  border: 1px solid #e3dbd2;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem;
+}
+.usage-date-field label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #8a7767;
+}
+.usage-date-field input {
+  background: transparent;
+  border: none;
+  font-size: 0.85rem;
+  color: #2e2a27;
+  outline: none;
+  cursor: pointer;
+}
+
+.usage-search-field {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #ffffff;
+  border: 1px solid #e3dbd2;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+.usage-search-field i {
+  color: #a28c7a;
+  font-size: 0.8rem;
+}
+.usage-search-field input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 0.85rem;
+  color: #2e2a27;
+  outline: none;
+}
+
+.usage-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: #6e5e4f;
+  font-weight: 600;
+}
+
+.usage-table-wrap {
+  border: 1px solid #e3dbd2;
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.usage-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.usage-table th {
+  background: #faf7f4;
+  color: #6e5e4f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  text-align: left;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #e3dbd2;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.usage-table th:hover {
+  background: #f0eae3;
+}
+.usage-table th.sort-asc::after  { content: ' ▲'; color: #4d6b80; }
+.usage-table th.sort-desc::after { content: ' ▼'; color: #4d6b80; }
+.usage-table td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid #f0eae3;
+  color: #2e2a27;
+}
+.usage-table tr:last-child td { border-bottom: none; }
+.usage-table tr:hover { background: #faf7f4; }
+
+.usage-event-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e3dbd2;
+  border-radius: 10px;
+  background: #ffffff;
+  margin-bottom: 0.5rem;
+}
+
+.usage-event-date {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #4d6b80;
+  padding-top: 0.15rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.usage-event-info {
+  flex: 1;
+  min-width: 0;
+}
+.usage-event-title {
+  font-weight: 600;
+  color: #1e2b36;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.usage-event-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8a7767;
+  background: #f0eae3;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+}
+.usage-event-songs {
+  font-size: 0.8rem;
+  color: #6e5e4f;
+  margin-top: 0.35rem;
+  line-height: 1.5;
+}
+.usage-event-notes {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: #8a7767;
+  margin-top: 0.35rem;
+}
+
+.usage-event-delete {
+  background: transparent;
+  border: none;
+  color: #b8a695;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.usage-event-delete:hover {
+  background: #fdf2ef;
+  color: #b8543f;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 1200px) {
