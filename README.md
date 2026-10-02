@@ -4,7 +4,7 @@ A single-page worship chord chart app for planning Sunday sets, transposing song
 
 ## Features
 
-- **Song library** — seeded with 78 common worship songs, plus your own imports
+- **Song library** — seeded with 76 common worship songs, plus your own imports
 - **Transpose** — shift keys with the semitone stepper or pick a target key directly
 - **Capo mode** — for guitarists; shows shapes relative to a capo position
 - **Nashville Number System** — toggle between letter chords and 1/4/5/6m
@@ -21,3 +21,4 @@ No build step. Open `index.html` in a browser, or use VS Code's **Live Server** 
 # Start a local server (optional)
 python3 -m http.server 8000
 # then visit http://localhost:8000
+
