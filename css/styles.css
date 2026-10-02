@@ -1069,6 +1069,72 @@ body {
 }
 
 /* ============================================================
+   CONTEXT MENU (right-click on song items)
+   ============================================================ */
+.context-menu {
+  position: fixed;
+  z-index: 2000;
+  background: #ffffff;
+  border: 1px solid #e3dbd2;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  padding: 0.35rem;
+  min-width: 180px;
+  animation: contextMenuIn 0.08s ease-out;
+}
+
+@keyframes contextMenuIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: #2e2a27;
+  transition: background 0.08s;
+  user-select: none;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus {
+  background: #faf7f4;
+  outline: none;
+}
+
+.context-menu-item i {
+  color: #8a7767;
+  font-size: 0.85rem;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.context-menu-item.danger {
+  color: #b8543f;
+}
+
+.context-menu-item.danger i {
+  color: #b8543f;
+}
+
+.context-menu-item.danger:hover,
+.context-menu-item.danger:focus {
+  background: #fdf2ef;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #efe7de;
+  margin: 0.25rem 0.35rem;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 1200px) {

@@ -149,9 +149,18 @@ window.ParserText = (function () {
       i++;
     }
 
+    // Compute the leading whitespace of the chord line. We'll subtract
+    // this from every chord's column so positions are relative to the
+    // first visible character — this makes them align with lyric lines
+    // that may have a different amount of leading indentation.
+    const leadingWhitespace = cleaned.length - cleaned.replace(/^\s+/, '').length;
+
     merged.forEach(t => {
       if (MT.isStrictChord(t.token)) {
-        positions.push({ chord: t.token, col: t.col });
+        positions.push({
+          chord: t.token,
+          col: Math.max(0, t.col - leadingWhitespace)
+        });
       }
     });
     return positions;
@@ -169,18 +178,35 @@ window.ParserText = (function () {
     if (chordPositions.length === 0) {
       return `<div class="line"><span class="pair"><span class="chord empty">&nbsp;</span><span class="lyric">${escapeLyricForHtml(lyricLine.replace(/\s+$/, ''))}</span></span></div>`;
     }
+
+    // Compute the lyric line's own leading whitespace and normalize
+    // chord positions relative to it. This handles the case where the
+    // chord line is indented more (or less) than the lyric line — a
+    // common pattern in pasted web chord sheets like WorshipChords.
+    const lyricLeading = lyricLine.length - lyricLine.replace(/^\s+/, '').length;
+    const normalizedChords = chordPositions.map(p => ({
+      chord: p.chord,
+      col: Math.max(0, p.col - lyricLeading)
+    }));
+
     let html = '<div class="line">';
-    for (let i = 0; i < chordPositions.length; i++) {
-      const { chord, col } = chordPositions[i];
-      const nextCol = (i + 1 < chordPositions.length) ? chordPositions[i + 1].col : lyricLine.length;
-      let syllable = (col < lyricLine.length)
-        ? lyricLine.slice(col, Math.min(nextCol, lyricLine.length))
-        : '';
-      const trimmed = syllable.replace(/^\s+/, '').replace(/\s+$/, '');
-      if (!trimmed) {
+    for (let i = 0; i < normalizedChords.length; i++) {
+      const { chord, col } = normalizedChords[i];
+      const nextCol = (i + 1 < normalizedChords.length)
+        ? normalizedChords[i + 1].col
+        : lyricLine.length;
+
+      // Slice the lyric from `col` up to `nextCol`, clamped to bounds.
+      const start = Math.min(col, lyricLine.length);
+      const end = Math.min(Math.max(nextCol, start), lyricLine.length);
+      let syllable = lyricLine.slice(start, end);
+      // Trim leading/trailing whitespace from the slice.
+      syllable = syllable.replace(/^\s+/, '').replace(/\s+$/, '');
+
+      if (!syllable) {
         html += `<span class="pair"><span class="chord" data-chord="${MT.escapeHtml(chord)}">${MT.escapeHtml(chord)}</span><span class="lyric">&nbsp;</span></span>`;
       } else {
-        html += `<span class="pair"><span class="chord" data-chord="${MT.escapeHtml(chord)}">${MT.escapeHtml(chord)}</span><span class="lyric">${escapeLyricForHtml(trimmed)}</span></span>`;
+        html += `<span class="pair"><span class="chord" data-chord="${MT.escapeHtml(chord)}">${MT.escapeHtml(chord)}</span><span class="lyric">${escapeLyricForHtml(syllable)}</span></span>`;
       }
     }
     html += '</div>';
@@ -196,24 +222,81 @@ window.ParserText = (function () {
       const raw = lines[i];
       const trimmed = raw.trim();
 
-      // [Section] labels
-      const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
-      if (sectionMatch) {
-        out.push(`<div class="section">${MT.escapeHtml(sectionMatch[1].trim())}</div>`);
-        i++;
-        continue;
+      // ------------------------------------------------------------
+      // 1. Section detection — supports [Section], # Section, and
+      //    bare section names like "Verse 1", "Chorus", "Bridge 2".
+      //    We also handle [Repeat: X] reference markers from
+      //    ParserWeb if it's loaded.
+      // ------------------------------------------------------------
+      if (trimmed) {
+        // [Section] or [Repeat: X]
+        const bracketMatch = trimmed.match(/^\[([^\]]+)\]$/);
+        if (bracketMatch) {
+          const label = bracketMatch[1].trim();
+          const repeatMatch = label.match(/^Repeat:\s*(.+)$/i);
+          if (repeatMatch) {
+            out.push(`<div class="section-reference"><i class="fas fa-redo"></i> Repeat ${MT.escapeHtml(repeatMatch[1].trim())}</div>`);
+          } else {
+            out.push(`<div class="section">${MT.escapeHtml(label)}</div>`);
+          }
+          i++;
+          continue;
+        }
+
+        // Bare section names: "Verse 1", "Chorus", "# Verse 2", "## BRIDGE"
+        // Only treat as a section if it's a SHORT line (under 40 chars)
+        // AND not a chord line AND not something that reads like lyrics.
+        if (trimmed.length <= 40 && !looksLikeChordLine(trimmed)) {
+          // Use ParserFormats if available; fall back to a local check.
+          let isSection = false;
+          let normalizedName = trimmed;
+          if (window.ParserFormats && typeof ParserFormats.parseSectionHeader === 'function') {
+            const parsed = ParserFormats.parseSectionHeader(trimmed);
+            if (parsed) {
+              isSection = true;
+              normalizedName = parsed.normalized;
+            }
+          } else {
+            // Local fallback: keyword + short
+            const upper = trimmed.toUpperCase().replace(/^#+\s*/, '');
+            const keywords = ['VERSE','CHORUS','BRIDGE','PRE-CHORUS','PRECHORUS','PRE CHORUS','INTRO','OUTRO','TAG','ENDING','INSTRUMENTAL','INTERLUDE','REFRAIN','VAMP','TURNAROUND','SOLO','BREAKDOWN'];
+            const firstWord = upper.split(/\s+/)[0];
+            isSection = keywords.some(kw => upper === kw || upper.startsWith(kw + ' ') || firstWord === kw);
+            if (isSection) {
+              normalizedName = upper.split(/\s+/).map(w =>
+                /^[0-9A-Z]+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+              ).join(' ');
+            }
+          }
+
+          if (isSection) {
+            out.push(`<div class="section">${MT.escapeHtml(normalizedName)}</div>`);
+            i++;
+            continue;
+          }
+        }
       }
 
       if (trimmed === '') { i++; continue; }
 
-      // Chord line + following lyric line
+      // ------------------------------------------------------------
+      // 2. Chord line + following lyric line
+      // ------------------------------------------------------------
       if (looksLikeChordLine(raw) && /[A-G]/.test(trimmed)) {
         const { direction } = extractPerformanceDirection(raw);
         const positions = parseChordPositions(raw);
         const nextLine = (i + 1 < lines.length) ? lines[i + 1] : '';
         const nextTrimmed = nextLine.trim();
         const nextIsChordLine = nextLine && looksLikeChordLine(nextLine) && /[A-G]/.test(nextTrimmed);
-        const nextIsSection = /^\[[^\]]+\]$/.test(nextTrimmed);
+
+        // Also treat next line as "not a lyric" if it's a section header
+        let nextIsSection = false;
+        if (nextTrimmed) {
+          if (/^\[[^\]]+\]$/.test(nextTrimmed)) nextIsSection = true;
+          else if (nextTrimmed.length <= 40 && window.ParserFormats && ParserFormats.parseSectionHeader(nextTrimmed)) {
+            nextIsSection = true;
+          }
+        }
 
         if (nextTrimmed !== '' && !nextIsChordLine && !nextIsSection) {
           out.push(buildLineHtml(positions, nextLine));
@@ -221,6 +304,7 @@ window.ParserText = (function () {
           i += 2;
           continue;
         } else {
+          // Instrumental / chord-only line
           const chordStr = positions
             .map(p => `<span class="chord" data-chord="${MT.escapeHtml(p.chord)}">${MT.escapeHtml(p.chord)}</span>`)
             .join('  ');
@@ -231,7 +315,9 @@ window.ParserText = (function () {
         }
       }
 
-      // Plain lyric line with no chords
+      // ------------------------------------------------------------
+      // 3. Plain lyric line with no chords
+      // ------------------------------------------------------------
       out.push(`<div class="line"><span class="pair"><span class="chord empty">&nbsp;</span><span class="lyric">${escapeLyricForHtml(trimmed)}</span></span></div>`);
       i++;
     }

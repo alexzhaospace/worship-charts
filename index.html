@@ -331,17 +331,67 @@ Light of the world, You stepped down into darkness"></textarea>
     </div>
   </div>
 
+    <!-- PASTE CHORDS MODAL -->
+  <div class="modal-overlay" id="pasteChordsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3><i class="fas fa-paste"></i> Paste Chords for "<span id="pasteChordsSongTitle">Song</span>"</h3>
+        <button class="modal-close" data-close="pasteChordsModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-hint">
+          Open the source PDF in Preview, Acrobat, or a browser. Select all text
+          (<code>Cmd+A</code> / <code>Ctrl+A</code>), copy (<code>Cmd+C</code> / <code>Ctrl+C</code>),
+          and paste it below. This replaces the current chord sheet with the pasted version.
+        </div>
+
+        <div class="form-field">
+          <label for="pasteChordsTextarea">Pasted Chord Sheet</label>
+          <textarea id="pasteChordsTextarea" style="min-height:280px;" placeholder="Paste the copied text here.
+
+Example:
+[Verse 1]
+F          C
+My hope is built on nothing less
+Bb
+Than Jesus' blood and righteousness"></textarea>
+        </div>
+
+        <div class="paste-preview-note" id="pasteChordsPreview" style="display:none;margin-top:0.85rem;padding:0.6rem 0.85rem;background:#faf7f4;border-left:3px solid #d9cfc4;border-radius:0 8px 8px 0;font-size:0.8rem;color:#8a7767;">
+          <i class="fas fa-info-circle" style="color:#4d6b80;"></i>
+          <span id="pasteChordsPreviewText"></span>
+        </div>
+
+        <div class="paste-preview-note" id="pasteChordsWarning" style="display:none;margin-top:0.5rem;padding:0.6rem 0.85rem;background:#fdf6f4;border-left:3px solid #b8543f;border-radius:0 8px 8px 0;font-size:0.8rem;color:#8a3a2b;">
+          <i class="fas fa-exclamation-triangle" style="color:#b8543f;"></i>
+          <span id="pasteChordsWarningText"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="pasteChordsModal">Cancel</button>
+        <div class="right-actions">
+          <button class="btn btn-primary" id="pasteChordsReplaceBtn" disabled>
+            <i class="fas fa-check"></i> Replace Chords
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <!-- ============================================================
        SCRIPTS — load in dependency order
        ============================================================ -->
   <script src="js/storage.js"></script>
   <script src="js/music-theory.js"></script>
   <script src="js/parser-text.js"></script>
+  <script src="js/parser-formats.js"></script>
   <script src="js/parser-pdf.js"></script>
   <script src="js/songs.js"></script>
   <script src="js/render.js"></script>
   <script src="js/pdf-export.js"></script>
   <script src="js/setlists.js"></script>
+  <script src="js/context-menu.js"></script>
+  <script src="js/paste-chords.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

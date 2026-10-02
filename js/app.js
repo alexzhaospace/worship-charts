@@ -170,10 +170,39 @@ window.App = (function () {
         right.appendChild(del);
       }
 
-      item.appendChild(titleSpan);
+            item.appendChild(titleSpan);
       item.appendChild(right);
       item.addEventListener('click', () => showSongView(song.id));
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const items = [
+          {
+            icon: 'fa-paste',
+            label: 'Paste Chords',
+            action: () => {
+              PasteChords.open(song.id, (songId) => {
+                // After replacing, if this is the active song, re-render it
+                if (songId === activeSongId) {
+                  displaySong(songId, false);
+                } else {
+                  // Just refresh the sidebar to reflect any key changes
+                  renderSongList($('searchInput').value);
+                }
+              });
+            }
+          },
+          { divider: true },
+          {
+            icon: 'fa-trash',
+            label: 'Delete Song',
+            danger: true,
+            action: () => deleteSong(song.id)
+          }
+        ];
+        ContextMenu.show(e.clientX, e.clientY, items);
+      });
       container.appendChild(item);
+
     });
   }
 
@@ -1123,6 +1152,11 @@ window.App = (function () {
       if (file) importBackup(file);
       $('importLibraryInput').value = '';
     });
+
+    // ---- Paste Chords modal ----
+    if (window.PasteChords) {
+      PasteChords.wire();
+    }
 
     // ---- Keyboard shortcuts ----
     document.addEventListener('keydown', (e) => {

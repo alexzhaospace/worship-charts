@@ -23,6 +23,7 @@ window.ParserPdf = (function () {
 
   const MT = window.MusicTheory;
   const PT = window.ParserText;
+  const ParserFormats = window.ParserFormats;
 
   // ============================================================
   // STAGE 1: Extract fragments with positions
@@ -100,26 +101,121 @@ window.ParserPdf = (function () {
     const medianH = heights[Math.floor(heights.length / 2)] || 10;
     const yTolerance = medianH * 0.55;
 
-    const lines = [];
+    // ------------------------------------------------------------
+    // STEP 1: Group fragments by Y into raw lines
+    // ------------------------------------------------------------
+    const rawLines = [];
     let current = null;
     inCol.forEach(f => {
       if (!current || Math.abs(f.y - current.y) > yTolerance) {
-        if (current) lines.push(current);
+        if (current) rawLines.push(current);
         current = { y: f.y, frags: [f] };
       } else {
         current.frags.push(f);
         current.y = (current.y * (current.frags.length - 1) + f.y) / current.frags.length;
       }
     });
-    if (current) lines.push(current);
+    if (current) rawLines.push(current);
 
-    lines.forEach(line => {
+    // ------------------------------------------------------------
+    // STEP 2: Deduplicate + reconstruct each line
+    // ------------------------------------------------------------
+    const lines = rawLines.map(line => {
+      // Sort by X
       line.frags.sort((a, b) => a.x - b.x);
-      const hs = line.frags.map(f => f.height);
-      line.avgHeight = hs.reduce((a, b) => a + b, 0) / hs.length;
-      line.boldCount = line.frags.filter(f => f.bold).length;
-      line.boldRatio = line.boldCount / line.frags.length;
-      line.text = line.frags.map(f => f.str).join(' ').trim();
+
+      // Dedup overlapping fragments — a fragment whose X range is
+      // entirely contained within another fragment's X range AND
+      // whose text is a substring of that fragment is a duplicate.
+      const deduped = [];
+      line.frags.forEach(f => {
+        const overlap = deduped.find(d => {
+          const dStart = d.x;
+          const dEnd = d.x + (d.width || 0);
+          const fStart = f.x;
+          const fEnd = f.x + (f.width || 0);
+          // Overlap if fragments share > 60% of the smaller one's span
+          const overlapStart = Math.max(dStart, fStart);
+          const overlapEnd = Math.min(dEnd, fEnd);
+          const overlapW = Math.max(0, overlapEnd - overlapStart);
+          const minW = Math.max(0.1, Math.min(d.width, f.width));
+          return overlapW / minW > 0.6;
+        });
+        if (overlap) {
+          // Keep the longer string (usually the "real" one)
+          if ((f.str || '').length > (overlap.str || '').length) {
+            overlap.str = f.str;
+            overlap.width = Math.max(overlap.width, f.width);
+          }
+          return;
+        }
+        deduped.push(f);
+      });
+
+      // --------------------------------------------------------
+      // STEP 3: Compute character-width statistics
+      // --------------------------------------------------------
+      // We need a sense of how wide a single character is in this
+      // line to judge whether a gap is a space or just glyph
+      // tracking. Compute per-fragment average char width, then
+      // take the median across the line.
+      const charWidths = [];
+      deduped.forEach(f => {
+        const len = (f.str || '').length;
+        if (len > 0 && f.width > 0) {
+          charWidths.push(f.width / len);
+        }
+      });
+      charWidths.sort((a, b) => a - b);
+      const medianCharW = charWidths.length > 0
+        ? charWidths[Math.floor(charWidths.length / 2)]
+        : line.frags[0].height * 0.5;
+
+      // A real space is roughly 0.35× the average character width.
+      // A "tight" gap (no space) is under ~0.2×. We use three
+      // thresholds:
+      //   gap < TIGHT   → no space inserted
+      //   gap < SPACE   → no space inserted (still tight)
+      //   gap >= SPACE  → insert one space
+      // Anything much larger → insert multiple spaces (proportional)
+      const TIGHT = medianCharW * 0.15;
+      const SPACE_THRESHOLD = medianCharW * 0.30;
+
+      // --------------------------------------------------------
+      // STEP 4: Reconstruct the line with adaptive spacing
+      // --------------------------------------------------------
+      let text = '';
+      let prevEnd = null;
+      let boldCount = 0;
+      let totalHeight = 0;
+
+      deduped.forEach(it => {
+        if (prevEnd !== null) {
+          const gap = it.x - prevEnd;
+          if (gap > SPACE_THRESHOLD) {
+            // Real space (or multiple)
+            const numSpaces = Math.max(1, Math.min(12, Math.round(gap / medianCharW)));
+            text += ' '.repeat(numSpaces);
+          } else if (gap > TIGHT) {
+            // Borderline — treat as tight (no space). This is where
+            // the old code was inserting spurious spaces.
+          }
+          // gap <= TIGHT → nothing to add
+        }
+        text += it.str;
+        prevEnd = it.x + (it.width || 0);
+        if (it.bold) boldCount++;
+        totalHeight += it.height;
+      });
+
+      return {
+        y: line.y,
+        frags: deduped,
+        avgHeight: totalHeight / Math.max(1, deduped.length),
+        boldCount,
+        boldRatio: boldCount / Math.max(1, deduped.length),
+        text: text.replace(/\s+$/, '')
+      };
     });
 
     return lines;
@@ -157,18 +253,34 @@ window.ParserPdf = (function () {
 
     if (isAttributionLine(t)) return 'attribution';
 
-    // Never treat a line that starts with "(" as a section header
     const startsWithParen = /^\s*\(/.test(t);
 
-    const isSection =
-      !startsWithParen &&
-      line.boldRatio > 0.6 &&
-      line.avgHeight > 8 &&
-      SECTION_KEYWORDS.some(kw =>
-        upper === kw || upper.startsWith(kw + ' ') || firstWord === kw);
+    // Try the format-agnostic section header parser.
+    const parsed = ParserFormats.parseSectionHeader(t);
+    if (parsed) {
+      // Case 1: leading "#" — trust it completely
+      if (parsed.hadHash) return 'section';
 
-    if (isSection) return 'section';
-    if (/Key\s*[-:]|Tempo\s*[-:]|Time\s*[-:]|\|\s*(Time|Tempo|Key)/i.test(t)) return 'meta';
+      // Case 2: bold or clearly larger text — also trust it
+      if (!startsWithParen && (line.boldRatio > 0.5 || line.avgHeight > 9)) {
+        return 'section';
+      }
+
+      // Case 3: no formatting clues — only treat as section if the
+      // line is short (typical of section headers) AND contains no
+      // verb-like content (i.e., it's not a lyric that happens to
+      // start with "Verse"). Section headers are ≤ 4 words and
+      // either contain a number or match an exact keyword.
+      const wordCount = t.split(/\s+/).length;
+      const hasNumber = /\d/.test(t);
+      const isExactKeyword = SECTION_KEYWORDS.includes(upper);
+
+      if (wordCount <= 4 && (hasNumber || isExactKeyword)) {
+        return 'section';
+      }
+    }
+
+    if (ParserFormats.looksLikeMetadata(t)) return 'meta';
     if (isCopyrightFooter(t)) return 'footer';
     if (PT.looksLikeChordOnlyLine(t)) return 'chords';
     return 'body';
@@ -374,33 +486,7 @@ window.ParserPdf = (function () {
   // STAGE 7: Metadata extraction
   // ============================================================
   function extractMetadata(line) {
-    const meta = { artist: '', key: '' };
-
-    const keyMatch = line.match(/Key\s*[-:]\s*([A-G][#b]?m?)/i);
-    if (keyMatch) meta.key = keyMatch[1].trim();
-
-    let artistPart = line;
-    const cutPoints = [
-      line.search(/Key\s*[-:]/i),
-      line.search(/\|\s*Tempo\s*[-:]/i),
-      line.search(/\|\s*Time\s*[-:]/i),
-      line.search(/Tempo\s*[-:]/i),
-      line.search(/Time\s*[-:]/i)
-    ].filter(i => i >= 0).sort((a, b) => a - b);
-
-    if (cutPoints.length > 0) {
-      artistPart = line.slice(0, cutPoints[0]);
-    }
-
-    artistPart = artistPart.replace(/\s*\|\s*$/, '').trim();
-    artistPart = artistPart.replace(/\s*\(as published[^)]*\)/i, '');
-    artistPart = artistPart.replace(/\s*\(as published by[^)]*\)/i, '');
-    artistPart = artistPart.replace(/\s+/g, ' ').trim();
-    artistPart = artistPart.replace(/^#+\s*/, '').trim();
-    artistPart = artistPart.replace(/^\d+\s+/, '').trim();
-
-    meta.artist = artistPart;
-    return meta;
+    return ParserFormats.parseMetadataLine(line);
   }
 
   // ============================================================
@@ -416,38 +502,94 @@ window.ParserPdf = (function () {
 
     if (flatLines.length === 0) return [];
 
-    // Detect title lines: the largest font size on the page.
+    // ------------------------------------------------------------
+    // STEP 1: Detect title candidates
+    // ------------------------------------------------------------
+    // Use a MUCH tighter threshold than before: a title must be
+    // within 5% of the largest font on the page. This is critical
+    // for PDFs where the title font isn't dramatically bigger than
+    // the body (Psalmnote, hand-typed exports, etc.).
     const heights = flatLines.map(l => l.avgHeight).filter(h => h > 0);
     const maxH = Math.max(...heights, 12);
-    const titleThreshold = maxH * 0.82;
+    const titleThreshold = maxH * 0.95;
 
-    const titleIdxs = [];
+    const titleCandidates = [];
     flatLines.forEach((line, idx) => {
       const kind = classifyLine(line);
-      if (kind === 'section' || kind === 'chords' || kind === 'footer' || kind === 'attribution') return;
+      // Never treat sections, chords, footers, or attributions as titles
+      if (kind === 'section' || kind === 'chords' ||
+          kind === 'footer' || kind === 'attribution') return;
+      // Never treat metadata as a title
+      if (kind === 'meta') return;
       const t = (line.text || '').trim();
       if (!t) return;
-      if (line.avgHeight >= titleThreshold) titleIdxs.push(idx);
+      // Must be title-sized
+      if (line.avgHeight < titleThreshold) return;
+      // Must not be too long (a title is usually under 60 chars)
+      if (t.length > 60) return;
+      titleCandidates.push(idx);
     });
 
-    // Fallback: if we can't find any title, treat the whole doc as one song.
-    if (titleIdxs.length === 0) {
+    // ------------------------------------------------------------
+    // STEP 2: Filter title candidates
+    // ------------------------------------------------------------
+    // Two filters:
+    //   (a) Collapse clusters of adjacent candidates — only keep
+    //       the first one. A "cluster" is candidates within 3 lines
+    //       of each other. This prevents a 2-line title from being
+    //       counted as two songs.
+    //   (b) Enforce a minimum distance of 6 lines between two
+    //       accepted titles. Shorter intervals are almost always
+    //       a body line that happens to be title-sized.
+
+    const MIN_DISTANCE = 6;
+    const CLUSTER_DISTANCE = 3;
+
+    const accepted = [];
+    let lastAccepted = -Infinity;
+
+    titleCandidates.forEach(idx => {
+      if (accepted.length === 0) {
+        accepted.push(idx);
+        lastAccepted = idx;
+        return;
+      }
+
+      const distance = idx - lastAccepted;
+
+      // Within cluster range? Skip (part of the same title block)
+      if (distance <= CLUSTER_DISTANCE) return;
+
+      // Within minimum distance? Skip (likely a false positive)
+      if (distance < MIN_DISTANCE) return;
+
+      accepted.push(idx);
+      lastAccepted = idx;
+    });
+
+    // ------------------------------------------------------------
+    // STEP 3: Fallback — if no titles were found, treat as one song
+    // ------------------------------------------------------------
+    if (accepted.length === 0) {
       const html = buildSongFromLines(flatLines);
       const inferred = MT.inferKeyFromHtml(html) || 'C';
       return [{
-        title: (flatLines[0].text || 'Untitled').trim(),
+        title: (flatLines[0].text || 'Untitled').trim().slice(0, 60),
         artist: 'Unknown',
         key: inferred,
         chordSheet: html
       }];
     }
 
+    // ------------------------------------------------------------
+    // STEP 4: Segment into songs
+    // ------------------------------------------------------------
     const songs = [];
-    for (let i = 0; i < titleIdxs.length; i++) {
-      const start = titleIdxs[i];
-      const end = (i + 1 < titleIdxs.length) ? titleIdxs[i + 1] : flatLines.length;
+    for (let i = 0; i < accepted.length; i++) {
+      const start = accepted[i];
+      const end = (i + 1 < accepted.length) ? accepted[i + 1] : flatLines.length;
       const titleLine = flatLines[start];
-      const title = (titleLine.text || 'Untitled').trim();
+      const title = (titleLine.text || 'Untitled').trim().slice(0, 60);
 
       // Look ahead up to 3 non-blank lines for metadata (artist + key).
       let metaLine = '';
@@ -474,12 +616,15 @@ window.ParserPdf = (function () {
           continue;
         }
 
-        // Heuristic: a line that looks like an artist name
+        // Heuristic: a line right after a title that contains "|" or
+        // commas and reads like names is likely the artist line.
         const looksLikeArtist =
           /[A-Za-z]/.test(candidateText) &&
-          candidate.avgHeight < titleLine.avgHeight * 1.1 &&
-          (candidateText.includes('|') ||
-           /^[A-Z][a-zA-Z.'&\- ]+(?:\s*[|/]\s*[A-Z][a-zA-Z.'&\- ]+)*$/.test(candidateText));
+          candidate.avgHeight < titleLine.avgHeight * 1.15 &&
+          (
+            candidateText.includes('|') ||
+            /^[A-Z][a-zA-Z.'&\- ]+(?:\s*[|/]\s*[A-Z][a-zA-Z.'&\- ]+)*$/.test(candidateText)
+          );
 
         if (looksLikeArtist) {
           metaCandidates.push(candidateText);
@@ -504,11 +649,11 @@ window.ParserPdf = (function () {
       const meta = metaLine ? extractMetadata(metaLine) : { artist: '', key: '' };
       const html = buildSongFromLines(bodyLines);
 
-      // Key resolution: metadata → scan whole block → infer from chords → C
+      // Key resolution: metadata → scan → infer → C
       let songKey = meta.key;
       if (!songKey) {
         const allText = bodyLines.map(l => l.text).join(' ') + ' ' + metaLine;
-        const keyFromScan = allText.match(/Key\s*[-:]\s*([A-G][#b]?m?)/i);
+        const keyFromScan = allText.match(/\bKey\s*[-:]\s*([A-G][#b]?m?)/i);
         if (keyFromScan) songKey = keyFromScan[1].trim();
       }
       if (!songKey) songKey = MT.inferKeyFromHtml(html);
