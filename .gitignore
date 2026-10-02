@@ -1,0 +1,29 @@
+
+## File 2 of 5 — `.gitignore`
+
+Create this at the root of `worship-charts/`:
+
+```gitignore
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (in case we add tooling later)
+node_modules/
+npm-debug.log*
+
+# Build artifacts
+dist/
+build/
+
+# Local env
+.env
+.env.local
