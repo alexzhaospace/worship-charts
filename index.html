@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Worship Chord Charts · App</title>
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+  <!-- Third-party libraries (load once, used by js/ modules) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ============================================================
+         SIDEBAR
+         ============================================================ -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1><i class="fas fa-church"></i> Worship Charts</h1>
+        <div class="header-actions">
+          <button class="icon-btn upload" id="openUploadModal" title="Import PDFs (batch supported)">
+            <i class="fas fa-file-import"></i>
+          </button>
+          <button class="icon-btn" id="openAddModal" title="Add a new song">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-panel="songs">
+          <i class="fas fa-music"></i> Songs
+        </button>
+        <button class="sidebar-tab" data-panel="setlists">
+          <i class="fas fa-list-ol"></i> Setlists
+        </button>
+      </div>
+
+      <!-- SONGS PANEL -->
+      <div class="sidebar-panel active" id="panel-songs">
+        <div class="search-wrapper">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Search songs..." autocomplete="off">
+          </div>
+        </div>
+        <div class="scroll-list" id="songList"></div>
+      </div>
+
+      <!-- SETLISTS PANEL -->
+      <div class="sidebar-panel" id="panel-setlists">
+        <div class="search-wrapper">
+          <div class="search-box" style="background:#4d6b80;border-color:#61839a;">
+            <i class="fas fa-plus" style="color:#fff;"></i>
+            <input type="text" id="newSetlistInput" placeholder="New setlist name + Enter..." autocomplete="off" style="color:#fff;">
+          </div>
+        </div>
+        <div class="scroll-list" id="setlistList"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button id="exportLibraryBtn" title="Download a JSON backup of all songs and setlists">
+          <i class="fas fa-download"></i> Backup
+        </button>
+        <button id="importLibraryBtn" title="Restore from a JSON backup">
+          <i class="fas fa-upload"></i> Restore
+        </button>
+        <input type="file" id="importLibraryInput" accept=".json,application/json" style="display:none;">
+      </div>
+    </aside>
+
+    <!-- ============================================================
+         MAIN PANEL
+         ============================================================ -->
+    <main class="main-panel">
+      <!-- SONG VIEW -->
+      <div class="view active" id="view-song">
+        <div class="chord-header">
+          <div class="song-title-block">
+            <h2 id="selectedSongTitle">—</h2>
+            <div class="meta">
+              <span><i class="fas fa-user"></i> <span id="selectedArtist">—</span></span>
+              <span id="capoIndicator" style="display:none;color:#4a7a63;font-weight:600;">
+                <i class="fas fa-guitar"></i> Capo <span id="capoIndicatorFret">0</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="controls-stack">
+            <div class="controls-row">
+              <div class="toggle-group">
+                <button class="toggle-btn active" id="toggleLetters">
+                  <i class="fas fa-music"></i> Letters
+                </button>
+                <button class="toggle-btn" id="toggleNashville">
+                  <i class="fas fa-hashtag"></i> Numbers
+                </button>
+              </div>
+            </div>
+
+            <div class="controls-row">
+              <div class="key-select-wrap">
+                <label for="keySelect">Key</label>
+                <select id="keySelect"></select>
+                <span class="shift-badge zero" id="shiftBadge">+0 st</span>
+              </div>
+
+              <div class="capo-select-wrap">
+                <label for="capoSelect">Capo</label>
+                <select id="capoSelect">
+                  <option value="0">—</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                </select>
+              </div>
+
+              <div class="stepper">
+                <button class="step-btn" id="transposeDown" aria-label="Transpose down">&minus;</button>
+                <button class="step-btn" id="transposeUp" aria-label="Transpose up">+</button>
+              </div>
+
+              <button class="reset-btn" id="resetKey">
+                <i class="fas fa-undo"></i> Reset
+              </button>
+              <button class="download-btn" id="downloadPdf">
+                <i class="fas fa-file-pdf"></i> <span id="downloadLabel">Download PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chord-content" id="chordContent">
+          <div class="capo-banner" id="capoBanner">
+            <i class="fas fa-guitar"></i>
+            <span id="capoBannerText"></span>
+          </div>
+          <div class="chord-sheet" id="chordSheet"></div>
+        </div>
+      </div>
+
+      <!-- SETLIST VIEW -->
+      <div class="view" id="view-setlist">
+        <div class="setlist-header">
+          <div class="setlist-title-block">
+            <h2 id="setlistTitle">—</h2>
+            <div class="meta">
+              <span><i class="fas fa-music"></i> <span id="setlistCount">0 songs</span></span>
+            </div>
+          </div>
+          <div class="setlist-actions">
+            <button class="btn-secondary-dark" id="addSongsToSetlistBtn">
+              <i class="fas fa-plus"></i> Add Songs
+            </button>
+            <button class="btn-secondary-dark" id="setlistDownloadBtn">
+              <i class="fas fa-file-pdf"></i> Download Setlist PDF
+            </button>
+            <button class="btn-danger" id="deleteSetlistBtn">
+              <i class="fas fa-trash"></i> Delete
+            </button>
+          </div>
+        </div>
+
+        <div class="setlist-content">
+          <div class="setlist-songs" id="setlistSongs"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============================================================
+       MODALS
+       ============================================================ -->
+
+  <!-- ADD SONG MODAL -->
+  <div class="modal-overlay" id="addModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3><i class="fas fa-music"></i> Add a New Song</h3>
+        <button class="modal-close" data-close="addModal">&times;</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="single">Single Song</button>
+        <button class="modal-tab" data-tab="bulk">Add by Title List</button>
+      </div>
+      <div class="modal-body">
+        <div class="tab-panel active" id="tab-single">
+          <div class="form-row">
+            <div class="form-field">
+              <label for="songTitleInput">Title</label>
+              <input type="text" id="songTitleInput" placeholder="e.g. Amazing Grace">
+            </div>
+            <div class="form-field">
+              <label for="songArtistInput">Artist / Source</label>
+              <input type="text" id="songArtistInput" placeholder="e.g. Traditional">
+            </div>
+            <div class="form-field small">
+              <label for="songKeyInput">Key</label>
+              <select id="songKeyInput">
+                <option>C</option><option>Db</option><option>D</option>
+                <option>Eb</option><option>E</option><option>F</option>
+                <option>F#</option><option>G</option><option>Ab</option>
+                <option>A</option><option>Bb</option><option>B</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-hint">
+            <strong>Format:</strong> Write chords on their own line, then the lyric line right below.
+          </div>
+          <div class="form-field">
+            <label for="chordTextInput">Lyrics &amp; Chords</label>
+            <textarea id="chordTextInput" placeholder="[Verse 1]
+Bb         Eb
+Light of the world, You stepped down into darkness"></textarea>
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-bulk">
+          <div class="form-hint">
+            Paste one song per line in the format <code>Title | Artist | Key</code>.
+          </div>
+          <div class="form-field">
+            <label for="bulkInput">Song List</label>
+            <textarea id="bulkInput" placeholder="Amazing Grace | John Newton | G"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="addModal">Cancel</button>
+        <div class="right-actions">
+          <button class="btn btn-primary" id="saveAdd">
+            <i class="fas fa-check"></i> Add Song
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH UPLOAD PDF MODAL -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal wide">
+      <div class="modal-header">
+        <h3><i class="fas fa-file-import upload-icon"></i> Import Chord Sheets (Batch)</h3>
+        <button class="modal-close" data-close="uploadModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-hint">
+          Drop a <strong>single PDF</strong>, <strong>multiple PDFs</strong>, a <strong>ZIP file</strong> containing PDFs,
+          or an entire <strong>folder</strong>. Songs matching your existing library will be
+          <strong>merged</strong> into them.
+        </div>
+
+        <div class="dropzone" id="dropzone">
+          <div class="drop-icon"><i class="fas fa-file-import"></i></div>
+          <div class="drop-title">Click to choose files, or drag &amp; drop them here</div>
+          <div class="drop-sub">
+            Accepts <strong>.pdf</strong>, <strong>.zip</strong>, or a folder containing them
+          </div>
+          <input type="file" id="fileInput" accept=".pdf,.zip,application/pdf,application/zip" multiple>
+          <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
+        </div>
+
+        <div class="folder-drop-hint">
+          <i class="fas fa-folder-open"></i>
+          <span>Prefer picking a whole folder?
+            <a href="#" id="browseFolderLink" style="color:#4d6b80;font-weight:600;text-decoration:none;">Browse a folder</a>
+          </span>
+        </div>
+
+        <div class="batch-queue" id="batchQueue">
+          <div class="batch-queue-header">
+            <span><i class="fas fa-list-ul"></i> Import Queue</span>
+            <span class="summary" id="batchSummary"></span>
+          </div>
+          <div id="batchItems"></div>
+        </div>
+
+        <div class="parse-error" id="parseError"></div>
+
+        <div id="parsedResults" style="display:none;">
+          <div class="parsed-songs-header">
+            <span>Ready to import</span>
+            <span class="count" id="parsedCount">0</span>
+          </div>
+          <div id="parsedSongsList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="uploadModal">Cancel</button>
+        <div class="right-actions">
+          <button class="btn btn-primary" id="importParsed" disabled>
+            <i class="fas fa-download"></i> Import All
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SONG PICKER MODAL -->
+  <div class="modal-overlay" id="pickerModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3><i class="fas fa-plus-circle"></i> Add Songs to Setlist</h3>
+        <button class="modal-close" data-close="pickerModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="picker-search">
+          <i class="fas fa-search"></i>
+          <input type="text" id="pickerSearchInput" placeholder="Search your library...">
+        </div>
+        <div class="picker-list" id="pickerList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="pickerModal">Cancel</button>
+        <div class="right-actions">
+          <button class="btn btn-primary" id="pickerAddBtn">
+            <i class="fas fa-plus"></i> Add Selected
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCRIPTS — load in dependency order
+       ============================================================ -->
+  <script src="js/storage.js"></script>
+  <script src="js/music-theory.js"></script>
+  <script src="js/parser-text.js"></script>
+  <script src="js/parser-pdf.js"></script>
+  <script src="js/songs.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/pdf-export.js"></script>
+  <script src="js/setlists.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
